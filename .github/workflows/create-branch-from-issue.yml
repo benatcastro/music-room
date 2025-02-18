@@ -7,17 +7,41 @@ on:
 jobs:
   create-branch:
     runs-on: ubuntu-latest
+    outputs:
+      branch_name: ${{ steps.get_branch_name.outputs.branch_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Extract Issue Information
-        id: issue
+      - name: Get branch name
+        id: get_branch_name
         run: |
           ISSUE_NUMBER=${{ github.event.issue.number }}
           ISSUE_TITLE="${{ github.event.issue.title }}"
-          SAFE_TITLE=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
-          BRANCH_NAME="issue-${ISSUE_NUMBER}-${SAFE_TITLE:0:20}"  # Limit branch name length
+          
+          # Remove any [text] at the beginning of the title
+          CLEAN_TITLE=$(echo "$ISSUE_TITLE" | sed -E 's/^\[[^]]+\] *//')
+
+          # Extract first label (if exists)
+          LABEL_NAME="${{ github.event.issue.labels[0].name }}"
+          
+          # Define label abbreviations
+          case "$LABEL_NAME" in
+            "bug") LABEL_ABBR="bug" ;;
+            "feature") LABEL_ABBR="feat" ;;
+            "enhancement") LABEL_ABBR="enh" ;;
+            "documentation") LABEL_ABBR="doc" ;;
+            "refactor") LABEL_ABBR="ref" ;;
+            "test") LABEL_ABBR="test" ;;
+            *) LABEL_ABBR="misc" ;;  # Default if label is unknown or missing
+          esac
+
+          # Sanitize title to remove special characters
+          SAFE_TITLE=$(echo "$CLEAN_TITLE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+
+          # Format branch name as <abbr>#<issue_number>#<issue_title>
+          BRANCH_NAME="${LABEL_ABBR}#${ISSUE_NUMBER}#${SAFE_TITLE:0:20}"  # Limit title length
+
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
       - name: Create Branch
@@ -41,4 +65,3 @@ jobs:
               issue_number: issue_number,
               body: `✅ A new branch has been created for this issue: \`${branch_name}\`.`
             });
-  
